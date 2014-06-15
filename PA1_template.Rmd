@@ -3,18 +3,178 @@
 
 ## Loading and preprocessing the data
 
+```{r}
+activity <-read.csv("activity.csv", colClasses=c("integer", "Date", "integer"))
+
+#activity <- activity[!is.na(activity$steps),]
+
+```
 
 
 ## What is mean total number of steps taken per day?
 
+The following figure shows the total number of steps per day
+```{r,  fig.width = 12, fig.height = 8}
 
+totalStepsPerDay <- aggregate(steps ~ date, data = activity,
+          FUN = sum) 
+
+barplot(totalStepsPerDay$steps, ylab="Total number of steps per day", xlab="date", space=1)
+
+text(seq(1.5,2*length(totalStepsPerDay$date),by=2), par("usr")[3], 
+     srt = 60, adj= 1, xpd = TRUE,
+     labels = totalStepsPerDay$date, cex=0.7)
+
+```
+
+The average number of steps per day is:
+```{r,results='asis'}
+averageStepsPerDay <- aggregate(steps ~ date, data = activity,
+          FUN = mean) 
+
+kable(averageStepsPerDay, format = "html", table.attr = "width=\"200\"")
+```
+
+To ease readability we have shown the average steps per data as a plot below
+```{r}
+library(ggplot2)
+qplot(averageStepsPerDay$date, averageStepsPerDay$steps, geom="line")
+
+```
+
+Median number of steps per day
+```{r,  results='asis'}
+
+medianStepsPerDay <- aggregate(steps ~ date, data = activity,
+          FUN = median) 
+
+kable(medianStepsPerDay, format = "html", table.attr = "width=\"200\"")
+
+```
 
 ## What is the average daily activity pattern?
 
+The following figure illustrates the average number of steps taken, averaged across all days (y-axis) per 5-minute interval.
+
+```{r}
+library(ggplot2)
+
+qplot(activity$interval, activity$steps, geom="line", stat="summary", fun.y=mean, xlab="5 minuttes time interval", ylab="Number of steps per 5 mins time interval")
+
+```
+
+The following calculates the 5-minute interval, on average across all the days in the dataset, which contains the maximum number of steps:
+```{r}
+averageStepsPerInterval <- aggregate(steps ~ interval, data = activity,
+          FUN = mean)
+averageStepsPerInterval[which.max( averageStepsPerInterval$steps),1]
+
+```
 
 
 ## Imputing missing values
 
+Below we describe a strategy for imputing missing data. The strategy used is to use the averageStepsPerInterval calculated previously and use this to look up average number of steps for time intervals not having a value. We also compare imputed with non imputed data and what we see are that the average number of steps per day match up pretty close but the medians does not. For non imputed data the median is zero for each day, but for imputed data, then we have non zero medians and we also see data for dates which previously had no data at all.
+
+The number of missing steps values are:
+
+```{r}
+sum(is.na(activity$steps))
+
+```
+
+
+Below we will impute missing values with the mean of steps for the interval of the missing value.
+The result is stored in "imputedActivity". 
+
+For "calculating" the mean for a given interval we are using the previous result stored in "averageStepsPerInterval".
+
+```{r}
+imputedActivity <- activity
+# The following will reassign NA steps values for a given time interval in imputedActivity to the average 
+# value for the given time interval
+imputedActivity$steps <-sapply(1:length(activity$steps), function(x){
+  row <- activity[x, ]
+  steps <- row[,1]
+  interval <- row[, 3]
+  if(is.na(steps)){
+    # If the steps value is not set, then we set it to average steps value for the time interval.
+    # We do this by looking up the value for the selected time interval in averageStepsPerInterval.
+    averageStepsPerInterval[averageStepsPerInterval$interval==interval, 2]
+  }else {
+    # If the steps value is set, we just use it as it is.
+    steps
+  }
+})
+
+```
+
+Total number of steps per day for imputed data
+```{r,  fig.width = 12, fig.height = 8}
+
+totalStepsPerDayImputed <- aggregate(steps ~ date, data = imputedActivity,
+          FUN = sum) 
+
+barplot(totalStepsPerDayImputed$steps,  ylab="steps", xlab="date", space=1)
+
+text(seq(1.5,2*length(totalStepsPerDayImputed$date),by=2), par("usr")[3]-0.25, 
+     srt = 60, adj= 1, xpd = TRUE,
+     labels = totalStepsPerDayImputed$date, cex=0.7)
+```
+
+Average number of steps per day for imputed data
+```{r,  results='asis'}
+
+averageStepsPerDayImputed <- aggregate(steps ~ date, data = imputedActivity,
+          FUN = mean) 
+
+kable(averageStepsPerDayImputed, format = "html", table.attr = "width=\"200\"")
+
+```
+
+To ease comparability between imputed and non-imputed data we have shown the average steps per date for imputed and non-imputed data as a plot below. The blue line represents imputed data and the red line represents non imputed data. From the plot we can see that imputed and non-imputed data match up pretty close, but differences do exists.
+
+
+```{r}
+
+plot(averageStepsPerDayImputed$date, averageStepsPerDayImputed$steps, type="l", col="blue", xlab="date", ylab="Average number of steps per day")
+title("Comparison between imputed and non-imputed data")
+lines(averageStepsPerDay$date, averageStepsPerDay$steps, type="l", col="red")
+
+legend(averageStepsPerDayImputed$date[30], 75, c("imputed", "non-imputed"), lty = 1, col = c("blue","red"),  adj = c(0, 0.6))
+```
+
+
+Median number of steps per day for imputed data. Notice that we have non zero medians and that we have
+data for dates previously not have any data at all.
+
+```{r,  results='asis'}
+
+medianStepsPerDayImputed <- aggregate(steps ~ date, data = imputedActivity,
+          FUN = median) 
+
+kable(medianStepsPerDayImputed, format = "html", table.attr = "width=\"200\"")
+
+```
+
+
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+The graphs below shows the average number of steps taken during the time intervals of weekends
+compared to weekdays. The graphs shows that the tested people, on average and per time interval, took more steps during weekends than during weekdays.
+
+In the graphs below we have used the non imputed data.
+
+```{r,  results='asis'}
+
+activity$day <- as.factor(ifelse(weekdays(activity$date, TRUE)=="Sat"|weekdays(activity$date, TRUE)=="Sun", "WEEKEND", "WEEKDAY"))
+
+activity$day <- factor(activity$day, levels = c("WEEKEND", "WEEKDAY"))
+
+library(ggplot2)
+
+qplot(interval, steps, data=activity, geom="line", stat="summary", fun.y=mean, xlab="5 minuttes time interval", ylab="Number of steps per 5 mins time interval") +     facet_wrap(~ day, scales="free", ncol=1)
+```
+
